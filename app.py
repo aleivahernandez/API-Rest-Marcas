@@ -1,7 +1,9 @@
-import streamlit as st
+from flask import Flask, request, jsonify
 import pandas as pd
 from SBERT_Multilingue import buscar_marcas_similares as modelo_sbert
 from BETO import buscar_marcas_similares as modelo_beto
+
+app = Flask(__name__)
 
 def combinar_modelos_v2_unicos(marca_input, umbral=80.0):
     resultados = []
@@ -21,7 +23,6 @@ def combinar_modelos_v2_unicos(marca_input, umbral=80.0):
         except Exception as e:
             print(f"Error en {nombre_modelo}: {e}")
 
-    # Verifica si hay resultados antes de crear y manipular el DataFrame
     if not resultados:
         return pd.DataFrame(columns=["Modelo", "Marca", "Similitud (%)"])
 
@@ -34,18 +35,21 @@ def combinar_modelos_v2_unicos(marca_input, umbral=80.0):
     df.index.name = "Índice"
     return df
 
-# ------------------ STREAMLIT INTERFAZ ------------------
-st.title("🔍 Buscador de marcas similares")
-marca = st.text_input("Ingresa la marca que deseas evaluar:")
-umbral = st.slider("Umbral mínimo de similitud (%)", 0, 100, 80)
+@app.route('/buscar_marcas', methods=['POST'])
+def buscar_marcas():
+    data = request.json
+    marca = data.get('marca')
+    umbral = data.get('umbral', 80.0)
 
-if st.button("Buscar"):
-    if marca.strip():
+    if not marca:
+        return jsonify({'error': 'No se proporcionó la marca'}), 400
+
+    try:
         df_resultados = combinar_modelos_v2_unicos(marca.strip(), umbral=umbral)
-        if df_resultados.empty:
-            st.warning("No se encontraron coincidencias sobre el umbral.")
-        else:
-            st.success(f"{len(df_resultados)} marcas similares encontradas.")
-            st.dataframe(df_resultados)
-    else:
-        st.error("Por favor, ingresa una marca.")
+        resultados = df_resultados.to_dict(orient='records')
+        return jsonify(resultados), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(debug=True)
